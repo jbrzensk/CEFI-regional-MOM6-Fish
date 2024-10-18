@@ -3,5 +3,6 @@
 *~
 html
 /builds/build/*
+*.out
 # Ignore pycache
 **__pycache__
