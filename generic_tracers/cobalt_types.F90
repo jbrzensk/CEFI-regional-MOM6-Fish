@@ -39,6 +39,11 @@ module cobalt_types
                                             !! 2-update with no temperature dependence
                                             !! 3-update with temperature dependence
 
+  ! FEISTY options for namelist ( BRZENSKI ) 
+  logical, public  :: do_FEISTY                  = .true.   
+  logical, public  :: do_print_FEISTY_diagnostic = .false.
+  real, public     :: nonFmort = 0.10
+
   ! parameters      
   integer, parameter, public :: NUM_PHYTO = 4 !< total number of phytoplankton groups
   integer, parameter, public :: NUM_ZOO = 3   !< total number of zooplankton groups
@@ -739,7 +744,10 @@ module cobalt_types
           remoc, &
           tot_layer_int_doc,&
           tot_layer_int_poc,&
-          tot_layer_int_dic
+          tot_layer_int_dic,&
+          ! FESITY ( BRZENSKI )
+          hp_ingest_nmdz,&
+          hp_ingest_nlgz
 
 !==============================================================================================================
 
@@ -862,7 +870,9 @@ module cobalt_types
           wc_vert_int_jnamx,&
           wc_vert_int_jfe_iceberg,&
           wc_vert_int_jno3_iceberg,&
-          wc_vert_int_jpo4_iceberg
+          wc_vert_int_jpo4_iceberg, &
+          ! FEISTY ( BRZENSKI )
+          Pop_btm
 !==============================================================================================================
 
      real, dimension(:,:,:,:), pointer :: &
@@ -907,7 +917,10 @@ module cobalt_types
           p_sio4,&
           p_nsmz,&
           p_nmdz,&
-          p_nlgz
+          p_nlgz,&
+          ! FEISTY ( BRZENSKI )
+          p_hp_ingest_nmdz,&
+          p_hp_ingest_nlgz
 
       real, dimension (:,:), allocatable :: &
           runoff_flux_alk,&
@@ -1416,7 +1429,9 @@ module cobalt_types
           id_fbddtdip           = -1, &
           id_fbddtdife          = -1, &
           id_fbddtdisi          = -1, &
-          id_fbddtalk           = -1
+          id_fbddtalk           = -1, &
+          ! FEISTY ( BRZENSKI )
+          id_Pop_btm            = -1
 
 !==============================================================================================================
   end type generic_COBALT_type

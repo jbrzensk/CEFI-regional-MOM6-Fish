@@ -4634,6 +4634,15 @@ module COBALT_reg_diag
          cmor_standard_name="integral_wrt_depth_of_tendency_of_sea_water_alkalinity_expressed_as_mole_equivalent_due_to_biological_processes", &
          cmor_long_name="Rate of Change of Biological Alkalinity due to Biological Activity")
 
+    ! FEISTY ( BRZENSKI )
+    !  09/05/2024: Remy DENECHERE <rdenechere@ucsd.edu> COBALT output for offline FEISTY run
+    vardesc_temp = vardesc("Pop_btm", "Detritus flux to sea floor",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_Pop_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+            init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+            cmor_field_name="Pop_btm", cmor_units="mol m-2 s-1",                          &
+            cmor_standard_name="mass_flux_of_detritus_to_sea_floor", &
+            cmor_long_name="FEISTY Detritus flux to sea floor")
+    
 !==============================================================================================================
 
   end subroutine cobalt_reg_diagnostics

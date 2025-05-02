@@ -158,6 +158,13 @@ module generic_COBALT
 
   use FMS_co2calc_mod, only : FMS_co2calc, CO2_dope_vector
 
+  ! FEISTY Specific ( BRZENSKI )
+  use generic_FEISTY, only : generic_FEISTY_register, generic_FEISTY_init, generic_FEISTY_register_diag
+  use generic_FEISTY, only : generic_FEISTY_tracer_get_values, generic_FEISTY_tracer_get_pointer
+  use generic_FEISTY, only : generic_FEISTY_update_from_coupler, generic_FEISTY_fish_update_from_source
+  use generic_FEISTY, only : generic_FEISTY_end
+  use generic_FEISTY, only : generic_FEISTY_update_pointer, generic_FEISTY_send_diagnostic_data
+
   implicit none ; private
 
   public do_generic_COBALT
@@ -180,7 +187,9 @@ module generic_COBALT
                                              !! in generic_COBALT_nml.
 
   namelist /generic_COBALT_nml/ co2_calc, do_14c, do_nh3_atm_ocean_exchange, scheme_nitrif, debug, &
-     do_vertfill_pre,imbalance_tolerance,as_param_cobalt
+     do_vertfill_pre,imbalance_tolerance,as_param_cobalt, & 
+     ! FEISTY ( BRZENSKI )
+     do_FEISTY, do_print_FEISTY_diagnostic, nonFmort
   
   !
   ! Array allocations and flux calculations assume that phyto(1) is the
@@ -263,6 +272,11 @@ contains
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
 
+    ! Add FEISTY tracers ( BRZENSKI ): 
+    if (do_FEISTY) then 
+      call generic_FEISTY_register(tracer_list)  
+    end if 
+
   end subroutine generic_COBALT_register
 
   !  <SUBROUTINE NAME="generic_COBALT_init">
@@ -324,6 +338,11 @@ contains
     id_clock_source_sink_loop6 = mpp_clock_id('(Cobalt: source/sink loop 6)',grain=CLOCK_MODULE)
     id_clock_cobalt_send_diagnostics = mpp_clock_id('(Cobalt: send diagnostics)',grain=CLOCK_MODULE)
     id_clock_cobalt_calc_diagnostics = mpp_clock_id('(Cobalt: calculate diagnostics)',grain=CLOCK_MODULE)
+
+    ! Initialiser FEISTY: Add parameters and allocate arrays! ( BRZENSKI )
+    if (do_FEISTY) then
+      call generic_FEISTY_init(tracer_list)
+    end if 
 
   end subroutine generic_COBALT_init
 
@@ -2480,6 +2499,25 @@ contains
             init_value = 1.e-10           )
     end if
 
+    !==============================================================================================================
+    !  02/05/2025: Remy DENECHERE <rdenechere@ucsd.edu> COBALT output for offline FEISTY run *(BRZENSKI)*
+    !==============================================================================================================       
+    if (do_FEISTY) then
+      call g_tracer_add(tracer_list, package_name,&
+      name       = 'hp_ingest_nmdz',         &
+      longname   = 'High trophic level ingestion of medium zooplankton',  &
+      units      = 'mol N kg-1 s-1',      &
+      prog       = .true.,       &
+      init_value = 0.0           )
+
+      call g_tracer_add(tracer_list, package_name,&
+      name       = 'hp_ingest_nlgz',         &
+      longname   = 'High trophic level ingestion of large zooplankton',  &
+      units      = 'mol N kg-1 s-1',      &
+      prog       = .true.,       &
+      init_value = 0.0 )          
+    end if
+
   end subroutine user_add_tracers
 
 
@@ -2959,6 +2997,9 @@ contains
     integer :: stdoutunit, imbal_flag, outunit
     type(g_tracer_type), pointer :: g_tracer,g_tracer_next
     real :: KD_SMOOTH = 1.0E-05
+    
+    ! For FEISTY ( BRZENSKI )
+    real(8) :: alt_var_1, alt_var_2, alt_var_3, alt_var_4, alt_var_5, alt_var_6, alt_var_7, alt_var_8, alt_var_9, alt_var_10
 
     if(do_vertfill_pre) then
       g_tracer => tracer_list
@@ -3176,6 +3217,17 @@ contains
     call g_tracer_get_values(tracer_list,'nsmz'    ,'field',zoo(1)%f_n(:,:,:) ,isd,jsd,positive=.true.)
     call g_tracer_get_values(tracer_list,'nmdz'    ,'field',zoo(2)%f_n(:,:,:) ,isd,jsd,positive=.true.)
     call g_tracer_get_values(tracer_list,'nlgz'    ,'field',zoo(3)%f_n(:,:,:) ,isd,jsd,positive=.true.)
+    !==============================================================================================================
+    !  12/10/2024: Remy DENECHERE <rdenechere@ucsd.edu> COBALT output for offline FEISTY run       
+    ! 
+    ! fish from FEISTY  
+    ! 
+    if (do_FEISTY) then 
+      call generic_FEISTY_tracer_get_values(tracer_list, isd, jsd, tau)
+      call g_tracer_get_values(tracer_list, 'hp_ingest_nmdz' ,'field', cobalt%hp_ingest_nmdz(:,:,:), isd, jsd, ntau=tau, positive = .true.)
+      call g_tracer_get_values(tracer_list, 'hp_ingest_nlgz' ,'field', cobalt%hp_ingest_nlgz(:,:,:), isd, jsd, ntau=tau, positive = .true.)
+    end if 
+    ! =======================================================================================
     !
     ! bacteria
     !
@@ -4145,38 +4197,87 @@ contains
        ! The higher-predator ingestion calculations mirror those used for zooplankton.  Switching occurs between
        ! medium and large zooplankton assuming that forage fish have unique adaptations for these two size classes
        !
-       food1 = hp_ipa_vec(7)*prey_vec(7)
-       food2 = hp_ipa_vec(8)*prey_vec(8)
-       ! calculate realized prey availability from innate availability and relative abundance of alternative prey
-       sw_fac_denom = food1**cobalt%nswitch_hp+food2**cobalt%nswitch_hp
-       hp_pa_vec(7) = hp_ipa_vec(7)*(food1**cobalt%nswitch_hp / &
-               (sw_fac_denom+epsln) )**(1.0/cobalt%mswitch_hp)
-       hp_pa_vec(8) = hp_ipa_vec(8)*(food2**cobalt%nswitch_hp / &
-               (sw_fac_denom+epsln) )**(1.0/cobalt%mswitch_hp)
-       ! calculate the total prey from the realized prey availability
-       tot_prey_hp = hp_pa_vec(7)*prey_vec(7) + hp_pa_vec(8)*prey_vec(8)
-       ! calculate the rate at which large zooplankton ingests each prey type.  The default assumption for higher
-       ! predators is that the biomass of higher predators scales in proportion to the available prey.  That is,
-       ! it is implicitly assumed that fish biomass is proportional to tot_prey_hp.  For example, the ingestion of 
-       ! medium zooplankton (mz) by hp is:
-       !
-       ! hp_ingest_vec(7) = Imax(T,O2)*(available mz biomass)/(ki_hp + tot_prey_hp) * HP; where HP ~ tot_prey_hp
-       ! 
-       ! Note that this results in a density-dependent (i.e., quadratic) mortality consistent with fish aggregating
-       ! over regions of abundant prey.  This response can be modulated with coef_hp, but care would be needed
-       ! to ensure imax_hp has proper units if this coefficient were changed.
-       hp_ingest_vec(7) = cobalt%hp_temp_lim(i,j,k)*cobalt%hp_o2lim(i,j,k)*cobalt%imax_hp* &
-                          hp_pa_vec(7)*prey_vec(7)*tot_prey_hp**(cobalt%coef_hp-1.0)/ &
-                            (cobalt%ki_hp+tot_prey_hp)
-       hp_ingest_vec(8) = cobalt%hp_temp_lim(i,j,k)*cobalt%hp_o2lim(i,j,k)*cobalt%imax_hp* &
-                          hp_pa_vec(8)*prey_vec(8)*tot_prey_hp**(cobalt%coef_hp-1.0)/ &
-                            (cobalt%ki_hp+tot_prey_hp)
+       !==============================================================================================================
+       !  09/05/2024: Remy DENECHERE <rdenechere@ucsd.edu> COBALT output for offline FEISTY run   
+       !  01/05/2025: ( BRZENSKI )    
+       if (do_FEISTY) then
+         ! Predation from FEISTY calculation: 
+         ! prey_vec remain unchanged from FEISTY 
+         ! hp_ingest_vec(7:8) is calculated partly from FEISTY  (zoo(m)%hp_ingest(i,j,k))
+         ! hp_ipa_vec is the preference (not used inside FEISTY)
+
+         food1 = hp_ipa_vec(7)*prey_vec(7)
+         food2 = hp_ipa_vec(8)*prey_vec(8)
+         
+         ! COBALT-fish predation: (with 0.1* cobalt%imax_hp to keep some non-fish mortality on zooplankton) 
+         sw_fac_denom = food1**cobalt%nswitch_hp+food2**cobalt%nswitch_hp
+
+         hp_pa_vec(7) = hp_ipa_vec(7)*(food1**cobalt%nswitch_hp / &
+                   (sw_fac_denom+epsln) )**(1.0/cobalt%mswitch_hp)
+         hp_pa_vec(8) = hp_ipa_vec(8)*(food2**cobalt%nswitch_hp / &
+                   (sw_fac_denom+epsln) )**(1.0/cobalt%mswitch_hp)
+         tot_prey_hp = hp_pa_vec(7)*prey_vec(7) + hp_pa_vec(8)*prey_vec(8)
+
+         hp_ingest_vec(7) = cobalt%hp_ingest_nmdz(i,j,k) + nonFmort * cobalt%hp_temp_lim(i,j,k)*cobalt%hp_o2lim(i,j,k)*cobalt%imax_hp* &
+                             hp_pa_vec(7)*prey_vec(7)*tot_prey_hp**(cobalt%coef_hp-1.0)/ &
+                             (cobalt%ki_hp+tot_prey_hp)
+         hp_ingest_vec(8) = cobalt%hp_ingest_nlgz(i,j,k) + nonFmort * cobalt%hp_temp_lim(i,j,k)*cobalt%hp_o2lim(i,j,k)*cobalt%imax_hp* &
+                             hp_pa_vec(8)*prey_vec(8)*tot_prey_hp**(cobalt%coef_hp-1.0)/ &
+                             (cobalt%ki_hp+tot_prey_hp)
+
+         food1 = hp_ipa_vec(7)*prey_vec(7)
+         food2 = hp_ipa_vec(8)*prey_vec(8)
+         sw_fac_denom = food1**cobalt%nswitch_hp+food2**cobalt%nswitch_hp
+         hp_pa_vec(7) = hp_ipa_vec(7)*(food1**cobalt%nswitch_hp / &
+                   (sw_fac_denom+epsln) )**(1.0/cobalt%mswitch_hp)
+         hp_pa_vec(8) = hp_ipa_vec(8)*(food2**cobalt%nswitch_hp / &
+                   (sw_fac_denom+epsln) )**(1.0/cobalt%mswitch_hp)
+         tot_prey_hp = hp_pa_vec(7)*prey_vec(7) + hp_pa_vec(8)*prey_vec(8)
+         alt_var_1 = cobalt%hp_temp_lim(i,j,k)*cobalt%hp_o2lim(i,j,k)*cobalt%imax_hp* &
+                             hp_pa_vec(7)*prey_vec(7)*tot_prey_hp**(cobalt%coef_hp-1.0)/ &
+                             (cobalt%ki_hp+tot_prey_hp)
+         alt_var_2 = cobalt%hp_temp_lim(i,j,k)*cobalt%hp_o2lim(i,j,k)*cobalt%imax_hp* &
+                             hp_pa_vec(8)*prey_vec(8)*tot_prey_hp**(cobalt%coef_hp-1.0)/ &
+                             (cobalt%ki_hp+tot_prey_hp)
+      !==============================================================================================================
+
+       else ! Former fish predation on zooplankton from COBALT: 
+         food1 = hp_ipa_vec(7)*prey_vec(7)
+         food2 = hp_ipa_vec(8)*prey_vec(8)
+         ! calculate realized prey availability from innate availability and relative abundance of alternative prey
+         sw_fac_denom = food1**cobalt%nswitch_hp+food2**cobalt%nswitch_hp
+         hp_pa_vec(7) = hp_ipa_vec(7)*(food1**cobalt%nswitch_hp / &
+                  (sw_fac_denom+epsln) )**(1.0/cobalt%mswitch_hp)
+         hp_pa_vec(8) = hp_ipa_vec(8)*(food2**cobalt%nswitch_hp / &
+                  (sw_fac_denom+epsln) )**(1.0/cobalt%mswitch_hp)
+         ! calculate the total prey from the realized prey availability
+         tot_prey_hp = hp_pa_vec(7)*prey_vec(7) + hp_pa_vec(8)*prey_vec(8)
+         ! calculate the rate at which large zooplankton ingests each prey type.  The default assumption for higher
+         ! predators is that the biomass of higher predators scales in proportion to the available prey.  That is,
+         ! it is implicitly assumed that fish biomass is proportional to tot_prey_hp.  For example, the ingestion of 
+         ! medium zooplankton (mz) by hp is:
+         !
+         ! hp_ingest_vec(7) = Imax(T,O2)*(available mz biomass)/(ki_hp + tot_prey_hp) * HP; where HP ~ tot_prey_hp
+         ! 
+         ! Note that this results in a density-dependent (i.e., quadratic) mortality consistent with fish aggregating
+         ! over regions of abundant prey.  This response can be modulated with coef_hp, but care would be needed
+         ! to ensure imax_hp has proper units if this coefficient were changed.
+
+         hp_ingest_vec(7) = cobalt%hp_temp_lim(i,j,k)*cobalt%hp_o2lim(i,j,k)*cobalt%imax_hp* &
+                           hp_pa_vec(7)*prey_vec(7)*tot_prey_hp**(cobalt%coef_hp-1.0)/ &
+                              (cobalt%ki_hp+tot_prey_hp)
+         hp_ingest_vec(8) = cobalt%hp_temp_lim(i,j,k)*cobalt%hp_o2lim(i,j,k)*cobalt%imax_hp* &
+                           hp_pa_vec(8)*prey_vec(8)*tot_prey_hp**(cobalt%coef_hp-1.0)/ &
+                              (cobalt%ki_hp+tot_prey_hp)
+       endif
+
+       ! Hight trophic level ingestion: 
        cobalt%hp_jingest_n(i,j,k) = hp_ingest_vec(7) + hp_ingest_vec(8)
        cobalt%hp_jingest_p(i,j,k) = hp_ingest_vec(7)*prey_p2n_vec(7) + &
-                                    hp_ingest_vec(8)*prey_p2n_vec(8)
-       !
-       ! Calculate losses of zooplankton to higher predators
-       !
+                                       hp_ingest_vec(8)*prey_p2n_vec(8)
+         !
+         ! Calculate losses of zooplankton to higher predators
+         !
 
        do n = 1,NUM_ZOO !{
          zoo(n)%jhploss_n(i,j,k) = hp_ingest_vec(NUM_PHYTO+1+n)
@@ -4918,6 +5019,23 @@ contains
              ! The thickness of the bottom boundary layer (cobalt%bottom_thickness) impacts this upper bound.
              ! Efforts are underway to implement a more dynamic bottom boundary layer scheme.
              !
+            
+             ! FEISTY ( BRZENSKI )
+             ! FEISTY--no-vertical: -------------------------------------------------------------------------
+             ! Rémy Denéchère 
+             ! -----------------------------------------------------------------------------------------------
+             ! cobalt%Pop_btm(i,j): detritus usable for benthic comunities: 
+             cobalt%Pop_btm(i,j) =    cobalt%fntot_btm(i,j) - cobalt%fn_burial(i,j) - &
+                                           cobalt%fno3denit_sed(i,j)/cobalt%n_2_n_denit
+
+             if (do_FEISTY) then 
+             call generic_FEISTY_fish_update_from_source(tracer_list, i, j, nk, NUM_PREY, &
+                                                   Temp(i,j,1:nk), cobalt%Pop_btm(i,j),&
+                                                   dt, cobalt%zt(i, j, 1:nk), dzt(i,j, 1:nk),&
+                                                   zoo(2)%f_n(i,j,1:nk), zoo(3)%f_n(i,j,1:nk),&
+                                                   cobalt%hp_ingest_nmdz(i,j,1:nk), cobalt%hp_ingest_nlgz(i,j,1:nk))                                             
+             end if
+
              if (cobalt%btm_o2(i,j) .gt. cobalt%o2_min) then  !{
                 cobalt%fnoxic_sed(i,j) = max(0.0, min(cobalt%btm_o2(i,j)*cobalt%bottom_thickness* &
                                          cobalt%Rho_0*r_dt*(1.0/cobalt%o2_2_nh4), &
@@ -5146,6 +5264,13 @@ contains
        call g_tracer_get_pointer(tracer_list,'do14c','field',cobalt%p_do14c)
     endif
 
+    ! FEISTY ( BRZENSKI )
+    if (do_FEISTY) then 
+      call generic_FEISTY_tracer_get_pointer(tracer_list)
+      call g_tracer_get_pointer(tracer_list,'hp_ingest_nlgz','field', cobalt%p_hp_ingest_nlgz)
+      call g_tracer_get_pointer(tracer_list,'hp_ingest_nmdz','field', cobalt%p_hp_ingest_nmdz)
+    end if
+
     ! CAS calculate total N and P before source/sink
     ! calculate internal sources (those not applied as air-sea or benthos
     ! exchanges) to close the balance
@@ -5371,6 +5496,17 @@ contains
     enddo; enddo ; enddo  !} i,j,k
 !
     call mpp_clock_end(id_clock_source_sink_loop4)
+    !
+    !     Fish Derivative: update from pointers 
+    !     FEISTY ( BRZENSKI )
+    if (do_FEISTY) then 
+      do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
+           cobalt%p_hp_ingest_nmdz(i,j,k,tau) = cobalt%hp_ingest_nmdz(i,j,k)
+           cobalt%p_hp_ingest_nlgz(i,j,k,tau) = cobalt%hp_ingest_nlgz(i,j,k)
+           call generic_FEISTY_update_pointer(i, j, k, tau, dt)
+      enddo; enddo ; enddo  !} i,j,k
+    end if 
+    
     !
     !     NO3
     !
@@ -6432,6 +6568,33 @@ contains
     call cobalt_send_diagnostics(tracer_list,model_time,grid_tmask,Temp,Salt,rho_dzt,dzt, &
          isc,iec,jsc,jec,isd,ied,jsd,jed,nk,grid_kmt,tau,phyto,zoo,bact,cobalt)
 
+    !==============================================================================================================
+    !  01/05/2025: ( BRZENSKI ) Remy DENECHERE <rdenechere@ucsd.edu> COBALT output for offline FEISTY run   
+    ! Send Fish diagnostic data the old way
+    if (cobalt%id_Pop_btm .gt. 0)          &
+         used = g_send_data(cobalt%id_Pop_btm, cobalt%Pop_btm,           &
+         model_time, rmask = grid_tmask(:,:,1),&
+         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    ! zoo(2) and zoo(3) are sent regardless if offline ( see 6 lines above ) 
+    if (do_FEISTY) then 
+
+      ! Needs to be changed to print this out. OG Cobalt never changes
+      ! id_f_n from init value of -1 !! ( BRZENSKI )
+      ! if (zoo(2)%id_f_n .gt. 0)     &
+      !    used = g_send_data(zoo(2)%id_f_n, zoo(2)%f_n,         &
+      !    model_time, rmask = grid_tmask, &
+      !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+      ! if(zoo(3)%id_f_n .gt. 0)     &
+      !    used = g_send_data(zoo(3)%id_f_n, zoo(3)%f_n,         &
+      !    model_time, rmask = grid_tmask, &
+      !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+      ! Fish tracers and diagnostics 
+      ! FEISTY tracers: 
+      call generic_FEISTY_send_diagnostic_data(model_time)
+
+   end if 
 !==============================================================================================================
 
     call mpp_clock_end(id_clock_cobalt_send_diagnostics)
@@ -6816,6 +6979,12 @@ contains
   subroutine generic_COBALT_end
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_end'
     call user_deallocate_arrays
+     
+    ! FEISTY ( BRZENSKI )
+    if (do_FEISTY) then  
+      call generic_FEISTY_end
+    end if
+
   end subroutine generic_COBALT_end
 
   !
@@ -7223,6 +7392,13 @@ contains
     allocate(cobalt%wc_vert_int_jfe_iceberg(isd:ied, jsd:jed))  ; cobalt%wc_vert_int_jfe_iceberg=0.0
     allocate(cobalt%wc_vert_int_jno3_iceberg(isd:ied, jsd:jed))  ; cobalt%wc_vert_int_jno3_iceberg=0.0
     allocate(cobalt%wc_vert_int_jpo4_iceberg(isd:ied, jsd:jed))  ; cobalt%wc_vert_int_jpo4_iceberg=0.0
+
+    ! FESITY ( BRZENSKI )
+    allocate(cobalt%Pop_btm(isd:ied,jsd:jed));              cobalt%Pop_btm  = 0.0 !  
+    if (do_FEISTY) then 
+          allocate(cobalt%hp_ingest_nmdz(isd:ied, jsd:jed, 1:nk));   !  cobalt%hp_ingest_nmdz  = 0.0 ! 
+          allocate(cobalt%hp_ingest_nlgz(isd:ied, jsd:jed, 1:nk));   !  cobalt%hp_ingest_nlgz  = 0.0 ! 
+    endif
 !==============================================================================================================
     !
     ! allocate 100m integrated quantities
@@ -7826,6 +8002,15 @@ contains
     deallocate(cobalt%wc_vert_int_jfe_iceberg)
     deallocate(cobalt%wc_vert_int_jno3_iceberg)
     deallocate(cobalt%wc_vert_int_jpo4_iceberg)
+
+    !==============================================================================================================
+    ! FEISTY ( BRZENSKI ) 
+    ! 09/05/2024: Remy DENECHERE <rdenechere@ucsd.edu> COBALT output for offline FEISTY run
+    deallocate(cobalt%Pop_btm) 
+    if (do_FEISTY) then 
+         deallocate(cobalt%hp_ingest_nmdz); 
+         deallocate(cobalt%hp_ingest_nlgz); 
+    endif
 !==============================================================================================================
 
     do n = 1, NUM_PHYTO
