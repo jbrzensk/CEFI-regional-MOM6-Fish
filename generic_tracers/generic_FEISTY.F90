@@ -365,7 +365,6 @@ logical, parameter :: do_Benthic_pred_detritus = .false. ! Do predation from ben
 integer, parameter :: NUM_FISH = 8
 type(fish_type), dimension(NUM_FISH) :: fish
 type(FEISTY_type) :: FEISTY
-
 contains
 
 subroutine generic_FEISTY_register(tracer_list)    
