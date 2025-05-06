@@ -274,7 +274,9 @@ contains
 
     ! Add FEISTY tracers ( BRZENSKI ): 
     if (do_FEISTY) then 
-      call generic_FEISTY_register(tracer_list)  
+      print *, '<<< Registering FEISTY in COBALT >>>'
+      print *, '<<<<<<<<<<<<>>>>>>>>>>>>>>'
+      !call generic_FEISTY_register(tracer_list)  
     end if 
 
   end subroutine generic_COBALT_register
@@ -341,7 +343,8 @@ contains
 
     ! Initialiser FEISTY: Add parameters and allocate arrays! ( BRZENSKI )
     if (do_FEISTY) then
-      call generic_FEISTY_init(tracer_list)
+      print *, '<<< Initializing FEISTY from COBALT >>>'
+      !call generic_FEISTY_init(tracer_list)
     end if 
 
   end subroutine generic_COBALT_init
@@ -2503,6 +2506,8 @@ contains
     !  02/05/2025: Remy DENECHERE <rdenechere@ucsd.edu> COBALT output for offline FEISTY run *(BRZENSKI)*
     !==============================================================================================================       
     if (do_FEISTY) then
+      print *, 'Adding FEISTY tracers inside COBALT'
+      print *, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
       call g_tracer_add(tracer_list, package_name,&
       name       = 'hp_ingest_nmdz',         &
       longname   = 'High trophic level ingestion of medium zooplankton',  &
@@ -3224,8 +3229,13 @@ contains
     ! 
     if (do_FEISTY) then 
       call generic_FEISTY_tracer_get_values(tracer_list, isd, jsd, tau)
+      !print*, "Before get : init hp_ingest_nmdz", cobalt%hp_ingest_nmdz(1:4,1:4,1:4)
+      !print*, "Before get : init hp_ingest_nlgz", cobalt%hp_ingest_nlgz(1:4,1:4,1:4)
       call g_tracer_get_values(tracer_list, 'hp_ingest_nmdz' ,'field', cobalt%hp_ingest_nmdz(:,:,:), isd, jsd, ntau=tau, positive = .true.)
       call g_tracer_get_values(tracer_list, 'hp_ingest_nlgz' ,'field', cobalt%hp_ingest_nlgz(:,:,:), isd, jsd, ntau=tau, positive = .true.)
+      !print*, "init hp_ingest_nmdz", cobalt%hp_ingest_nmdz(1:4,1:4,1:4)
+      !print*, "init hp_ingest_nlgz", cobalt%hp_ingest_nlgz(1:4,1:4,1:4)
+ 
     end if 
     ! =======================================================================================
     !
@@ -6982,7 +6992,8 @@ contains
      
     ! FEISTY ( BRZENSKI )
     if (do_FEISTY) then  
-      call generic_FEISTY_end
+      ! called from generic_tracer.F90
+      !call generic_FEISTY_end
     end if
 
   end subroutine generic_COBALT_end
