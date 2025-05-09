@@ -2523,6 +2523,13 @@ contains
       init_value = 0.0 )          
     end if
 
+   !  call g_tracer_add( tracer_list, package_name,&
+   !    name       = 'Pop_btm',         &
+   !    longname   = 'Bottom population available foe things',  &
+   !    units      = 'mol N kg-1 s-1',      &
+   !    prog       = .false.,       &
+   !    init_value = 0.0           )
+
   end subroutine user_add_tracers
 
 
@@ -3229,12 +3236,12 @@ contains
     ! 
     if (do_FEISTY) then 
       call generic_FEISTY_tracer_get_values(tracer_list, isd, jsd, tau)
-      !print*, "Before get : init hp_ingest_nmdz", cobalt%hp_ingest_nmdz(1:4,1:4,1:4)
-      !print*, "Before get : init hp_ingest_nlgz", cobalt%hp_ingest_nlgz(1:4,1:4,1:4)
+      ! print*, "Before get : init hp_ingest_nmdz", cobalt%hp_ingest_nmdz(2,2,1:4)
+      ! print*, "Before get : init hp_ingest_nlgz", cobalt%hp_ingest_nlgz(2,2,1:4)
       call g_tracer_get_values(tracer_list, 'hp_ingest_nmdz' ,'field', cobalt%hp_ingest_nmdz(:,:,:), isd, jsd, ntau=tau, positive = .true.)
       call g_tracer_get_values(tracer_list, 'hp_ingest_nlgz' ,'field', cobalt%hp_ingest_nlgz(:,:,:), isd, jsd, ntau=tau, positive = .true.)
-      !print*, "init hp_ingest_nmdz", cobalt%hp_ingest_nmdz(1:4,1:4,1:4)
-      !print*, "init hp_ingest_nlgz", cobalt%hp_ingest_nlgz(1:4,1:4,1:4)
+      ! print*, "init hp_ingest_nmdz", cobalt%hp_ingest_nmdz(2,2,1:4)
+      ! print*, "init hp_ingest_nlgz", cobalt%hp_ingest_nlgz(2,2,1:4)
  
     end if 
     ! =======================================================================================
@@ -5513,7 +5520,9 @@ contains
       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
            cobalt%p_hp_ingest_nmdz(i,j,k,tau) = cobalt%hp_ingest_nmdz(i,j,k)
            cobalt%p_hp_ingest_nlgz(i,j,k,tau) = cobalt%hp_ingest_nlgz(i,j,k)
+
            call generic_FEISTY_update_pointer(i, j, k, tau, dt)
+
       enddo; enddo ; enddo  !} i,j,k
     end if 
     
@@ -5521,6 +5530,7 @@ contains
     !     NO3
     !
     call mpp_clock_begin(id_clock_source_sink_loop5)
+
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        cobalt%jno3(i,j,k) =  cobalt%jprod_no3nitrif(i,j,k) - phyto(DIAZO)%juptake_no3(i,j,k) - &
                              phyto(LARGE)%juptake_no3(i,j,k) - phyto(MEDIUM)%juptake_no3(i,j,k) - &
@@ -6581,10 +6591,11 @@ contains
     !==============================================================================================================
     !  01/05/2025: ( BRZENSKI ) Remy DENECHERE <rdenechere@ucsd.edu> COBALT output for offline FEISTY run   
     ! Send Fish diagnostic data the old way
-    if (cobalt%id_Pop_btm .gt. 0)          &
-         used = g_send_data(cobalt%id_Pop_btm, cobalt%Pop_btm,           &
-         model_time, rmask = grid_tmask(:,:,1),&
-         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+   ! print *, 'Sending Fish diagnostic data the old way'
+   !  if (cobalt%id_Pop_btm .gt. 0)          &
+   !       used = g_send_data(cobalt%id_Pop_btm, cobalt%Pop_btm,           &
+   !       model_time, rmask = grid_tmask(:,:,1),&
+   !       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     ! zoo(2) and zoo(3) are sent regardless if offline ( see 6 lines above ) 
     if (do_FEISTY) then 
@@ -7405,10 +7416,10 @@ contains
     allocate(cobalt%wc_vert_int_jpo4_iceberg(isd:ied, jsd:jed))  ; cobalt%wc_vert_int_jpo4_iceberg=0.0
 
     ! FESITY ( BRZENSKI )
-    allocate(cobalt%Pop_btm(isd:ied,jsd:jed));              cobalt%Pop_btm  = 0.0 !  
+    allocate(cobalt%Pop_btm(isd:ied,jsd:jed))                    ;   cobalt%Pop_btm  = 0.0 !  
     if (do_FEISTY) then 
-          allocate(cobalt%hp_ingest_nmdz(isd:ied, jsd:jed, 1:nk));   !  cobalt%hp_ingest_nmdz  = 0.0 ! 
-          allocate(cobalt%hp_ingest_nlgz(isd:ied, jsd:jed, 1:nk));   !  cobalt%hp_ingest_nlgz  = 0.0 ! 
+          allocate(cobalt%hp_ingest_nmdz(isd:ied, jsd:jed, 1:nk));   cobalt%hp_ingest_nmdz  = 0.0 ! 
+          allocate(cobalt%hp_ingest_nlgz(isd:ied, jsd:jed, 1:nk));   cobalt%hp_ingest_nlgz  = 0.0 ! 
     endif
 !==============================================================================================================
     !

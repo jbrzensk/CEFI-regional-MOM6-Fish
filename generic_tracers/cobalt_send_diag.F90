@@ -1149,6 +1149,10 @@ module COBALT_send_diag
           used = g_send_data(cobalt%id_intpoc, cobalt%wc_vert_int_poc*12.0e-3,   &
             model_time, rmask = grid_tmask(:,:,1), is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
+          ! FEISTY ( BRZENSKI )
+          used = g_send_data(cobalt%id_Pop_btm, cobalt%Pop_btm, &
+          model_time, rmask = grid_tmask(:,:,1), is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
         case (.false.)
         ! Logic for "update_from_source" case
 
@@ -2032,7 +2036,9 @@ module COBALT_send_diag
             model_time, rmask = grid_tmask(:,:,1), is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
           used = g_send_data(cobalt%id_jalk_100, cobalt%jalk_100, &
             model_time, rmask = grid_tmask(:,:,1), is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
-
+! FEISTY ( BRZENSKI )
+          used = g_send_data(cobalt%id_Pop_btm, cobalt%Pop_btm, &
+            model_time, rmask = grid_tmask(:,:,1), is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 !==============================================================================================================
 
       end select
