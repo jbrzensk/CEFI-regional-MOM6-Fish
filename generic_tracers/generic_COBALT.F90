@@ -359,7 +359,8 @@ contains
     type(time_type):: init_time
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes=axes,init_time=init_time)
     !
-    call cobalt_reg_diagnostics(diag_list,axes,init_time,phyto,zoo,bact,cobalt)    
+    call cobalt_reg_diagnostics(diag_list,axes,init_time,phyto,zoo,bact,cobalt)   
+    ! 
   end subroutine generic_COBALT_register_diag  
 
   !
