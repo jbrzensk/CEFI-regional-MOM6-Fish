@@ -2880,7 +2880,7 @@ contains
 
     ! send_diag for integeral outputs
     call cobalt_send_diagnostics(tracer_list,model_time,grid_tmask,Temp,Salt,rho_dzt,dzt, &
-         isc,iec,jsc,jec,isd,ied,jsd,jed,nk,grid_kmt,tau,phyto,zoo,bact,cobalt,post_vertdiff=.true.)
+         ilb,jlb,tau,phyto,zoo,bact,cobalt,post_vertdiff=.true.)
 
   end subroutine generic_COBALT_update_from_bottom
 
@@ -6592,7 +6592,7 @@ contains
 ! Send phytoplankton diagnostic data
 
     call cobalt_send_diagnostics(tracer_list,model_time,grid_tmask,Temp,Salt,rho_dzt,dzt, &
-         isc,iec,jsc,jec,isd,ied,jsd,jed,nk,grid_kmt,tau,phyto,zoo,bact,cobalt)
+         ilb,jlb,tau,phyto,zoo,bact,cobalt)
 
     !==============================================================================================================
     !  01/05/2025: ( BRZENSKI ) Remy DENECHERE <rdenechere@ucsd.edu> COBALT output for offline FEISTY run   
